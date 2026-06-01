@@ -1,0 +1,936 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Lucia Chat</title>
+<link href="https://fonts.googleapis.com/css2?family=Cormorant+Garamond:ital,wght@0,300;0,400;0,500;1,300;1,400&family=Jost:wght@300;400;500&display=swap" rel="stylesheet">
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+
+  :root {
+    --ocean: #1B4F72;
+    --gold: #C9A84C;
+    --gold-light: #E8C97A;
+    --sand: #F5EFE6;
+    --dark: #1a1a1a;
+    --mid: #6b7280;
+    --white: #ffffff;
+    --shadow: 0 8px 32px rgba(27,79,114,0.18);
+    --shadow-lg: 0 16px 48px rgba(27,79,114,0.24);
+  }
+
+  body {
+    font-family: 'Jost', sans-serif;
+    background: transparent;
+    overflow: hidden;
+    height: 100vh;
+    display: flex;
+    align-items: flex-end;
+    justify-content: flex-end;
+    padding: 20px;
+  }
+
+  #chat-toggle {
+    width: 60px;
+    height: 60px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--ocean) 0%, #2E86C1 100%);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    box-shadow: var(--shadow-lg);
+    transition: all 0.3s cubic-bezier(0.34, 1.56, 0.64, 1);
+    position: relative;
+    z-index: 1000;
+    flex-shrink: 0;
+  }
+
+  #chat-toggle:hover { transform: scale(1.08); box-shadow: 0 20px 56px rgba(27,79,114,0.32); }
+  #chat-toggle:active { transform: scale(0.96); }
+  #chat-toggle svg { width: 26px; height: 26px; fill: white; transition: all 0.3s ease; }
+  #chat-toggle .icon-close { display: none; }
+  #chat-toggle.open .icon-chat { display: none; }
+  #chat-toggle.open .icon-close { display: block; }
+
+  #notification-badge {
+    position: absolute;
+    top: -3px;
+    right: -3px;
+    width: 18px;
+    height: 18px;
+    background: var(--gold);
+    border-radius: 50%;
+    border: 2px solid white;
+    display: none;
+    align-items: center;
+    justify-content: center;
+    font-size: 10px;
+    font-weight: 500;
+    color: white;
+    font-family: 'Jost', sans-serif;
+    animation: pulse 2s infinite;
+  }
+
+  /* PROACTIVE BUBBLE */
+  #proactive-bubble {
+    position: fixed;
+    bottom: 92px;
+    right: 88px;
+    background: white;
+    border-radius: 16px;
+    border-bottom-right-radius: 4px;
+    padding: 12px 16px;
+    box-shadow: var(--shadow-lg);
+    max-width: 220px;
+    font-size: 13px;
+    font-family: 'Jost', sans-serif;
+    font-weight: 300;
+    color: var(--dark);
+    line-height: 1.5;
+    display: none;
+    animation: bubbleIn 0.4s cubic-bezier(0.34, 1.56, 0.64, 1) forwards;
+    z-index: 998;
+    cursor: pointer;
+  }
+
+  #proactive-bubble::after {
+    content: '';
+    position: absolute;
+    bottom: -8px;
+    right: 12px;
+    width: 0;
+    height: 0;
+    border-left: 8px solid transparent;
+    border-right: 0px solid transparent;
+    border-top: 8px solid white;
+  }
+
+  #proactive-bubble .bubble-name {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 12px;
+    color: var(--ocean);
+    font-weight: 500;
+    margin-bottom: 4px;
+    letter-spacing: 0.3px;
+  }
+
+  #proactive-bubble .bubble-close {
+    position: absolute;
+    top: 6px;
+    right: 8px;
+    font-size: 14px;
+    color: #9ca3af;
+    cursor: pointer;
+    line-height: 1;
+    padding: 2px;
+  }
+
+  @keyframes bubbleIn {
+    from { opacity: 0; transform: scale(0.8) translateY(10px); }
+    to { opacity: 1; transform: scale(1) translateY(0); }
+  }
+
+  @keyframes pulse {
+    0%, 100% { transform: scale(1); }
+    50% { transform: scale(1.15); }
+  }
+
+  #chat-window {
+    position: fixed;
+    bottom: 90px;
+    right: 20px;
+    width: 360px;
+    height: 560px;
+    background: var(--white);
+    border-radius: 20px;
+    box-shadow: var(--shadow-lg);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    transform: scale(0.85) translateY(20px);
+    opacity: 0;
+    pointer-events: none;
+    transition: all 0.35s cubic-bezier(0.34, 1.56, 0.64, 1);
+    transform-origin: bottom right;
+    z-index: 999;
+  }
+
+  #chat-window.open {
+    transform: scale(1) translateY(0);
+    opacity: 1;
+    pointer-events: all;
+  }
+
+  .chat-header {
+    background: linear-gradient(135deg, var(--ocean) 0%, #1a3f5c 100%);
+    padding: 16px 18px;
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    position: relative;
+    overflow: hidden;
+    flex-shrink: 0;
+  }
+
+  .chat-header::before {
+    content: '';
+    position: absolute;
+    top: -30px;
+    right: -30px;
+    width: 100px;
+    height: 100px;
+    background: rgba(201,168,76,0.12);
+    border-radius: 50%;
+  }
+
+  .lucia-avatar {
+    width: 40px;
+    height: 40px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--gold) 0%, var(--gold-light) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 18px;
+    font-weight: 500;
+    color: white;
+    flex-shrink: 0;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+    position: relative;
+    z-index: 1;
+  }
+
+  .lucia-info { position: relative; z-index: 1; }
+
+  .lucia-name {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 17px;
+    font-weight: 500;
+    color: white;
+    letter-spacing: 0.3px;
+    line-height: 1.2;
+  }
+
+  .lucia-status {
+    font-size: 11px;
+    color: rgba(255,255,255,0.7);
+    font-weight: 300;
+    letter-spacing: 0.5px;
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    margin-top: 1px;
+  }
+
+  .status-dot {
+    width: 6px;
+    height: 6px;
+    background: #4ade80;
+    border-radius: 50%;
+    animation: blink 2.5s infinite;
+  }
+
+  @keyframes blink {
+    0%, 100% { opacity: 1; }
+    50% { opacity: 0.4; }
+  }
+
+  .header-brand {
+    margin-left: auto;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 10px;
+    color: rgba(255,255,255,0.45);
+    letter-spacing: 1.5px;
+    text-transform: uppercase;
+    position: relative;
+    z-index: 1;
+  }
+
+  /* CONTACT CAPTURE FORM */
+  #contact-capture {
+    background: linear-gradient(135deg, #f0f7ff 0%, #faf8f4 100%);
+    padding: 16px;
+    border-bottom: 1px solid #e8eef4;
+    display: none;
+    flex-shrink: 0;
+  }
+
+  #contact-capture .capture-title {
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 14px;
+    font-weight: 500;
+    color: var(--ocean);
+    margin-bottom: 10px;
+    letter-spacing: 0.2px;
+  }
+
+  .capture-fields {
+    display: flex;
+    gap: 8px;
+    margin-bottom: 8px;
+  }
+
+  .capture-fields input {
+    flex: 1;
+    border: 1px solid #d1dce8;
+    border-radius: 8px;
+    padding: 7px 10px;
+    font-family: 'Jost', sans-serif;
+    font-size: 12.5px;
+    font-weight: 300;
+    color: var(--dark);
+    outline: none;
+    background: white;
+    transition: border-color 0.2s;
+  }
+
+  .capture-fields input:focus { border-color: var(--ocean); }
+  .capture-fields input::placeholder { color: #9ca3af; }
+
+  .capture-actions {
+    display: flex;
+    gap: 8px;
+    align-items: center;
+  }
+
+  #capture-submit {
+    background: var(--ocean);
+    color: white;
+    border: none;
+    border-radius: 8px;
+    padding: 7px 16px;
+    font-family: 'Jost', sans-serif;
+    font-size: 12.5px;
+    font-weight: 400;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    letter-spacing: 0.3px;
+  }
+
+  #capture-submit:hover { background: #154460; transform: translateY(-1px); }
+
+  #capture-skip {
+    font-size: 11.5px;
+    color: #9ca3af;
+    cursor: pointer;
+    font-family: 'Jost', sans-serif;
+    font-weight: 300;
+    text-decoration: underline;
+    background: none;
+    border: none;
+    padding: 0;
+  }
+
+  #capture-skip:hover { color: var(--mid); }
+
+  .capture-note {
+    font-size: 10px;
+    color: #9ca3af;
+    margin-top: 6px;
+    font-weight: 300;
+    letter-spacing: 0.2px;
+  }
+
+  .chat-messages {
+    flex: 1;
+    overflow-y: auto;
+    padding: 16px;
+    display: flex;
+    flex-direction: column;
+    gap: 12px;
+    background: #f8f9fb;
+    scroll-behavior: smooth;
+  }
+
+  .chat-messages::-webkit-scrollbar { width: 4px; }
+  .chat-messages::-webkit-scrollbar-track { background: transparent; }
+  .chat-messages::-webkit-scrollbar-thumb { background: #d1d5db; border-radius: 2px; }
+
+  .message {
+    display: flex;
+    gap: 8px;
+    animation: fadeSlideIn 0.3s ease forwards;
+    opacity: 0;
+  }
+
+  @keyframes fadeSlideIn {
+    from { opacity: 0; transform: translateY(8px); }
+    to { opacity: 1; transform: translateY(0); }
+  }
+
+  .message.user { flex-direction: row-reverse; }
+
+  .msg-avatar {
+    width: 28px;
+    height: 28px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--gold) 0%, var(--gold-light) 100%);
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    font-family: 'Cormorant Garamond', serif;
+    font-size: 12px;
+    color: white;
+    flex-shrink: 0;
+    margin-top: 2px;
+  }
+
+  .msg-bubble {
+    max-width: 78%;
+    padding: 10px 14px;
+    border-radius: 16px;
+    font-size: 13.5px;
+    line-height: 1.55;
+    font-weight: 300;
+    letter-spacing: 0.1px;
+  }
+
+  .message.lucia .msg-bubble {
+    background: white;
+    color: var(--dark);
+    border-bottom-left-radius: 4px;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+  }
+
+  .message.user .msg-bubble {
+    background: linear-gradient(135deg, var(--ocean) 0%, #2E86C1 100%);
+    color: white;
+    border-bottom-right-radius: 4px;
+  }
+
+  .typing-indicator { display: flex; gap: 8px; align-items: flex-end; }
+
+  .typing-dots {
+    background: white;
+    border-radius: 16px;
+    border-bottom-left-radius: 4px;
+    padding: 12px 16px;
+    display: flex;
+    gap: 4px;
+    align-items: center;
+    box-shadow: 0 1px 4px rgba(0,0,0,0.07);
+  }
+
+  .typing-dots span {
+    width: 6px;
+    height: 6px;
+    background: #9ca3af;
+    border-radius: 50%;
+    animation: typingBounce 1.2s infinite;
+  }
+
+  .typing-dots span:nth-child(2) { animation-delay: 0.2s; }
+  .typing-dots span:nth-child(3) { animation-delay: 0.4s; }
+
+  @keyframes typingBounce {
+    0%, 60%, 100% { transform: translateY(0); }
+    30% { transform: translateY(-6px); }
+  }
+
+  .quick-replies {
+    display: flex;
+    flex-wrap: wrap;
+    gap: 6px;
+    margin-top: 4px;
+    padding-left: 36px;
+  }
+
+  .quick-reply {
+    background: white;
+    border: 1px solid #e5e7eb;
+    color: var(--ocean);
+    font-family: 'Jost', sans-serif;
+    font-size: 12px;
+    font-weight: 400;
+    padding: 5px 12px;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.2s ease;
+    letter-spacing: 0.2px;
+  }
+
+  .quick-reply:hover {
+    background: var(--ocean);
+    color: white;
+    border-color: var(--ocean);
+    transform: translateY(-1px);
+  }
+
+  .date-divider {
+    text-align: center;
+    font-size: 10px;
+    color: #9ca3af;
+    letter-spacing: 1px;
+    text-transform: uppercase;
+    font-weight: 400;
+    display: flex;
+    align-items: center;
+    gap: 8px;
+  }
+
+  .date-divider::before,
+  .date-divider::after {
+    content: '';
+    flex: 1;
+    height: 1px;
+    background: #e5e7eb;
+  }
+
+  .chat-input-area {
+    padding: 12px 14px;
+    background: white;
+    border-top: 1px solid #f0f0f0;
+    display: flex;
+    gap: 8px;
+    align-items: flex-end;
+    flex-shrink: 0;
+  }
+
+  #message-input {
+    flex: 1;
+    border: 1px solid #e5e7eb;
+    border-radius: 20px;
+    padding: 9px 16px;
+    font-family: 'Jost', sans-serif;
+    font-size: 13.5px;
+    font-weight: 300;
+    color: var(--dark);
+    resize: none;
+    outline: none;
+    max-height: 80px;
+    min-height: 38px;
+    line-height: 1.5;
+    background: #f8f9fb;
+    transition: border-color 0.2s ease;
+    overflow-y: auto;
+  }
+
+  #message-input:focus { border-color: var(--ocean); background: white; }
+  #message-input::placeholder { color: #9ca3af; font-weight: 300; }
+
+  #send-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: linear-gradient(135deg, var(--ocean) 0%, #2E86C1 100%);
+    border: none;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s cubic-bezier(0.34, 1.56, 0.64, 1);
+    box-shadow: 0 2px 8px rgba(27,79,114,0.3);
+  }
+
+  #send-btn:hover { transform: scale(1.08); box-shadow: 0 4px 12px rgba(27,79,114,0.4); }
+  #send-btn:active { transform: scale(0.94); }
+  #send-btn:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  #send-btn svg { width: 16px; height: 16px; fill: white; margin-left: 2px; }
+
+  .chat-footer {
+    padding: 6px 14px 8px;
+    background: white;
+    text-align: center;
+    font-size: 10px;
+    color: #c9a84c;
+    letter-spacing: 0.8px;
+    text-transform: uppercase;
+    font-family: 'Cormorant Garamond', serif;
+    font-style: italic;
+    border-top: 1px solid #f8f8f8;
+    flex-shrink: 0;
+  }
+
+  @media (max-width: 480px) {
+    #chat-window { width: calc(100vw - 24px); right: 12px; bottom: 80px; height: 500px; }
+    body { padding: 12px; }
+    #proactive-bubble { right: 80px; max-width: 180px; }
+  }
+</style>
+</head>
+<body>
+
+<!-- PROACTIVE BUBBLE -->
+<div id="proactive-bubble" onclick="openFromBubble()">
+  <span class="bubble-close" onclick="closeBubble(event)">×</span>
+  <div class="bubble-name">Lucia · Lanmen Photography</div>
+  Planning a St. Lucia shoot? I can help you find the perfect package!
+</div>
+
+<!-- TOGGLE BUTTON -->
+<button id="chat-toggle" onclick="toggleChat()" aria-label="Chat with Lucia">
+  <div id="notification-badge">1</div>
+  <svg class="icon-chat" viewBox="0 0 24 24"><path d="M20 2H4c-1.1 0-2 .9-2 2v18l4-4h14c1.1 0 2-.9 2-2V4c0-1.1-.9-2-2-2z"/></svg>
+  <svg class="icon-close" viewBox="0 0 24 24"><path d="M19 6.41L17.59 5 12 10.59 6.41 5 5 6.41 10.59 12 5 17.59 6.41 19 12 13.41 17.59 19 19 17.59 13.41 12z"/></svg>
+</button>
+
+<!-- CHAT WINDOW -->
+<div id="chat-window">
+
+  <div class="chat-header">
+    <div class="lucia-avatar">L</div>
+    <div class="lucia-info">
+      <div class="lucia-name">Lucia</div>
+      <div class="lucia-status"><span class="status-dot"></span>Online now</div>
+    </div>
+    <div class="header-brand">Lanmen</div>
+  </div>
+
+  <!-- CONTACT CAPTURE -->
+  <div id="contact-capture">
+    <div class="capture-title">Quick intro before we chat!</div>
+    <div class="capture-fields">
+      <input type="text" id="capture-name" placeholder="Your name" />
+      <input type="email" id="capture-email" placeholder="Email address" />
+    </div>
+    <div class="capture-actions">
+      <button id="capture-submit" onclick="submitContactCapture()">Start chatting</button>
+      <button id="capture-skip" onclick="skipContactCapture()">Skip for now</button>
+    </div>
+    <div class="capture-note">We may follow up with helpful tips for your shoot</div>
+  </div>
+
+  <div class="chat-messages" id="chat-messages">
+    <div class="date-divider">Today</div>
+  </div>
+
+  <div class="chat-input-area">
+    <textarea
+      id="message-input"
+      placeholder="Ask Lucia anything..."
+      rows="1"
+      onkeydown="handleKeyDown(event)"
+      oninput="autoResize(this)"
+    ></textarea>
+    <button id="send-btn" onclick="sendMessage()" aria-label="Send message">
+      <svg viewBox="0 0 24 24"><path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2z"/></svg>
+    </button>
+  </div>
+
+  <div class="chat-footer">Lanmen Photography · St. Lucia</div>
+</div>
+
+<script>
+  // ============================================================
+  // CONFIGURATION
+  // ============================================================
+  const WORKER_URL = 'https://lucia-proxy.damp-union-ce60.workers.dev';
+  const NOTIFICATION_EMAIL = 'info@saintluciaphotographer.com';
+  // Get your free Web3Forms key at web3forms.com — takes 2 minutes
+  // Enter your email, they send you an access key, paste it below
+  const WEB3FORMS_KEY = '32b59940-860e-440e-bf1c-b25b6b0bf45a';
+
+  // ============================================================
+  // STATE
+  // ============================================================
+  let isOpen = false;
+  let isLoading = false;
+  let conversationHistory = [];
+  let hasGreeted = false;
+  let clientName = '';
+  let clientEmail = '';
+  let sessionStart = new Date();
+  let messageCount = 0;
+  let logSent = false;
+
+  // ============================================================
+  // PROACTIVE BUBBLE — appears after 5 seconds
+  // ============================================================
+  setTimeout(() => {
+    if (!isOpen) {
+      const bubble = document.getElementById('proactive-bubble');
+      bubble.style.display = 'block';
+      document.getElementById('notification-badge').style.display = 'flex';
+    }
+  }, 5000);
+
+  function closeBubble(event) {
+    event.stopPropagation();
+    document.getElementById('proactive-bubble').style.display = 'none';
+  }
+
+  function openFromBubble() {
+    document.getElementById('proactive-bubble').style.display = 'none';
+    if (!isOpen) toggleChat();
+  }
+
+  // ============================================================
+  // TOGGLE CHAT
+  // ============================================================
+  function toggleChat() {
+    isOpen = !isOpen;
+    const chatWindow = document.getElementById('chat-window');
+    const toggle = document.getElementById('chat-toggle');
+    const badge = document.getElementById('notification-badge');
+    const bubble = document.getElementById('proactive-bubble');
+
+    if (isOpen) {
+      chatWindow.classList.add('open');
+      toggle.classList.add('open');
+      badge.style.display = 'none';
+      bubble.style.display = 'none';
+
+      if (!hasGreeted) {
+        // Show contact capture first
+        document.getElementById('contact-capture').style.display = 'block';
+        hasGreeted = true;
+        setTimeout(() => sendGreeting(), 300);
+      }
+      setTimeout(() => document.getElementById('message-input').focus(), 400);
+    } else {
+      chatWindow.classList.remove('open');
+      toggle.classList.remove('open');
+      // Send conversation log when closing if there were messages
+      if (messageCount > 0 && !logSent) sendConversationLog();
+    }
+  }
+
+  // ============================================================
+  // CONTACT CAPTURE
+  // ============================================================
+  function submitContactCapture() {
+    const nameInput = document.getElementById('capture-name').value.trim();
+    const emailInput = document.getElementById('capture-email').value.trim();
+
+    if (nameInput) clientName = nameInput;
+    if (emailInput) clientEmail = emailInput;
+
+    document.getElementById('contact-capture').style.display = 'none';
+
+    if (clientName) {
+      addMessage('lucia', `Lovely to meet you, ${clientName}! How can I help you plan your St. Lucia shoot today?`);
+    }
+  }
+
+  function skipContactCapture() {
+    document.getElementById('contact-capture').style.display = 'none';
+  }
+
+  // ============================================================
+  // GREETING
+  // ============================================================
+  function sendGreeting() {
+    showTyping();
+    setTimeout(() => {
+      removeTyping();
+      addMessage('lucia', "Hi there! I'm Lucia, Lanmen Photography's assistant. I'm here to help you plan your perfect St. Lucia shoot. Feel free to ask me about pricing, locations, packages, or anything else!");
+      setTimeout(() => {
+        showQuickReplies([
+          'Pricing & packages',
+          'Location options',
+          'How to book',
+          'Flying dress shoots'
+        ]);
+      }, 300);
+    }, 1000);
+  }
+
+  // ============================================================
+  // SEND MESSAGE
+  // ============================================================
+  async function sendMessage() {
+    const input = document.getElementById('message-input');
+    const text = input.value.trim();
+    if (!text || isLoading) return;
+
+    input.value = '';
+    autoResize(input);
+
+    document.querySelectorAll('.quick-replies').forEach(el => el.remove());
+    addMessage('user', text);
+
+    conversationHistory.push({ role: 'user', content: text });
+    messageCount++;
+
+    isLoading = true;
+    document.getElementById('send-btn').disabled = true;
+    showTyping();
+
+    try {
+      const response = await fetch(WORKER_URL, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ messages: conversationHistory })
+      });
+
+      const data = await response.json();
+      removeTyping();
+
+      if (data.content && data.content[0] && data.content[0].text) {
+        const reply = data.content[0].text;
+        conversationHistory.push({ role: 'assistant', content: reply });
+        addMessage('lucia', reply);
+        messageCount++;
+
+        // Auto-send log after 6 messages for longer conversations
+        if (messageCount >= 6 && !logSent) sendConversationLog();
+
+      } else {
+        addMessage('lucia', "I'm sorry, I had a little trouble with that. Could you try again or reach us directly on WhatsApp at +1 758 730 9232?");
+      }
+    } catch (error) {
+      removeTyping();
+      addMessage('lucia', "I'm having a little trouble connecting right now. Please reach us directly at info@saintluciaphotographer.com or WhatsApp +1 758 730 9232!");
+    }
+
+    isLoading = false;
+    document.getElementById('send-btn').disabled = false;
+  }
+
+  // ============================================================
+  // CONVERSATION LOG — sends transcript to your email
+  // ============================================================
+  async function sendConversationLog() {
+    if (logSent || conversationHistory.length === 0) return;
+    if (!WEB3FORMS_KEY || WEB3FORMS_KEY.length < 10) return; // Skip if not configured
+
+    logSent = true;
+
+    const duration = Math.round((new Date() - sessionStart) / 60000);
+    const timestamp = new Date().toLocaleString('en-US', {
+      timeZone: 'America/St_Lucia',
+      dateStyle: 'medium',
+      timeStyle: 'short'
+    });
+
+    // Format the conversation transcript
+    let transcript = '';
+    conversationHistory.forEach(msg => {
+      const role = msg.role === 'user' ? (clientName || 'Visitor') : 'Lucia';
+      transcript += `${role}: ${msg.content}\n\n`;
+    });
+
+    const emailBody = `
+LUCIA CHAT TRANSCRIPT
+=====================
+Date: ${timestamp}
+Duration: ~${duration} minutes
+Messages exchanged: ${messageCount}
+
+VISITOR DETAILS
+---------------
+Name: ${clientName || 'Not provided'}
+Email: ${clientEmail || 'Not provided'}
+
+CONVERSATION
+------------
+${transcript}
+    `.trim();
+
+    try {
+      await fetch('https://api.web3forms.com/submit', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          access_key: WEB3FORMS_KEY,
+          subject: `Lucia Chat${clientName ? ' — ' + clientName : ''} — ${timestamp}`,
+          from_name: 'Lucia Chat Widget',
+          email: NOTIFICATION_EMAIL,
+          message: emailBody
+        })
+      });
+    } catch (error) {
+      // Silent fail — logging is non-critical
+    }
+  }
+
+  // ============================================================
+  // UI HELPERS
+  // ============================================================
+  function addMessage(sender, text) {
+    const messages = document.getElementById('chat-messages');
+    const messageDiv = document.createElement('div');
+    messageDiv.className = `message ${sender}`;
+
+    if (sender === 'lucia') {
+      messageDiv.innerHTML = `
+        <div class="msg-avatar">L</div>
+        <div class="msg-bubble">${formatMessage(text)}</div>
+      `;
+    } else {
+      messageDiv.innerHTML = `<div class="msg-bubble">${escapeHtml(text)}</div>`;
+    }
+
+    messages.appendChild(messageDiv);
+    scrollToBottom();
+  }
+
+  function showQuickReplies(options) {
+    const messages = document.getElementById('chat-messages');
+    const repliesDiv = document.createElement('div');
+    repliesDiv.className = 'quick-replies';
+
+    options.forEach(option => {
+      const btn = document.createElement('button');
+      btn.className = 'quick-reply';
+      btn.textContent = option;
+      btn.onclick = () => {
+        document.getElementById('message-input').value = option;
+        sendMessage();
+      };
+      repliesDiv.appendChild(btn);
+    });
+
+    messages.appendChild(repliesDiv);
+    scrollToBottom();
+  }
+
+  function showTyping() {
+    const messages = document.getElementById('chat-messages');
+    const typing = document.createElement('div');
+    typing.id = 'typing-indicator';
+    typing.className = 'message lucia typing-indicator';
+    typing.innerHTML = `
+      <div class="msg-avatar">L</div>
+      <div class="typing-dots"><span></span><span></span><span></span></div>
+    `;
+    messages.appendChild(typing);
+    scrollToBottom();
+  }
+
+  function removeTyping() {
+    const typing = document.getElementById('typing-indicator');
+    if (typing) typing.remove();
+  }
+
+  function scrollToBottom() {
+    const messages = document.getElementById('chat-messages');
+    setTimeout(() => { messages.scrollTop = messages.scrollHeight; }, 50);
+  }
+
+  function handleKeyDown(event) {
+    if (event.key === 'Enter' && !event.shiftKey) {
+      event.preventDefault();
+      sendMessage();
+    }
+  }
+
+  function autoResize(textarea) {
+    textarea.style.height = 'auto';
+    textarea.style.height = Math.min(textarea.scrollHeight, 80) + 'px';
+  }
+
+  function escapeHtml(text) {
+    return text
+      .replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br>');
+  }
+
+  function formatMessage(text) {
+    return escapeHtml(text)
+      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
+      .replace(/\*(.*?)\*/g, '<em>$1</em>');
+  }
+
+  // Send log on page unload as well
+  window.addEventListener('beforeunload', () => {
+    if (messageCount > 0 && !logSent) sendConversationLog();
+  });
+</script>
+</body>
+</html>
