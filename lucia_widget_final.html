@@ -674,9 +674,9 @@
       toggle.classList.add('open');
       badge.style.display = 'none';
       bubble.style.display = 'none';
+      window.parent.postMessage('lucia:open', '*');
 
       if (!hasGreeted) {
-        // Show contact capture first
         document.getElementById('contact-capture').style.display = 'block';
         hasGreeted = true;
         setTimeout(() => sendGreeting(), 300);
@@ -685,7 +685,7 @@
     } else {
       chatWindow.classList.remove('open');
       toggle.classList.remove('open');
-      // Send conversation log when closing if there were messages
+      window.parent.postMessage('lucia:closed', '*');
       if (messageCount > 0 && !logSent) sendConversationLog();
     }
   }
