@@ -96,6 +96,18 @@
     cursor: pointer;
   }
 
+  @media (max-width: 480px) {
+    #proactive-bubble {
+      bottom: 76px;
+      right: 16px;
+      max-width: 200px;
+      font-size: 12px;
+    }
+    #proactive-bubble::after {
+      right: 28px;
+    }
+  }
+
   #proactive-bubble::after {
     content: '';
     position: absolute;
