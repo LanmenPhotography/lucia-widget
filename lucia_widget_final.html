@@ -634,6 +634,7 @@
   const WORKER_URL = 'https://lucia-proxy.damp-union-ce60.workers.dev';
   const NOTIFICATION_EMAIL = 'info@saintluciaphotographer.com';
   const WEB3FORMS_KEY = '32b59940-860e-440e-bf1c-b25b6b0bf45a';
+  const LOG_INTERVAL = 6; // Send a transcript update every X messages
 
   // ============================================================
   // STATE
@@ -646,10 +647,11 @@
   let clientEmail = '';
   let sessionStart = new Date();
   let messageCount = 0;
-  let logSent = false;
+  let lastLoggedMessageCount = 0; // Tracks how many messages were in the last sent log
+  let updateCount = 0; // Tracks how many mid-conversation updates have been sent
 
   // ============================================================
-  // PROACTIVE BUBBLE — appears after 5 seconds, dismisses after 15
+  // PROACTIVE BUBBLE — appears after 5 seconds, dismisses after 20
   // ============================================================
   setTimeout(() => {
     if (!isOpen) {
@@ -657,7 +659,7 @@
       bubble.style.display = 'block';
       document.getElementById('notification-badge').style.display = 'flex';
 
-      // Auto-dismiss the bubble after 15 seconds
+      // Auto-dismiss the bubble after 20 seconds
       setTimeout(() => {
         if (!isOpen) {
           bubble.style.display = 'none';
@@ -708,7 +710,10 @@
       chatWindow.classList.remove('open');
       toggle.classList.remove('open');
       window.parent.postMessage('lucia:closed', '*');
-      if (messageCount > 0 && !logSent) sendConversationLog();
+      // Send a final complete transcript when chat is closed
+      if (messageCount > 0 && messageCount > lastLoggedMessageCount) {
+        sendConversationLog('final');
+      }
     }
   }
 
@@ -797,7 +802,11 @@
         addMessage('lucia', reply);
         messageCount++;
 
-        if (messageCount >= 6 && !logSent) sendConversationLog();
+        // Send a mid-conversation update every LOG_INTERVAL messages
+        if (messageCount >= LOG_INTERVAL && messageCount % LOG_INTERVAL === 0) {
+          updateCount++;
+          sendConversationLog('update');
+        }
 
       } else {
         addMessage('lucia', "I'm sorry, I had a little trouble with that. Could you try again or reach us directly on WhatsApp at +1 758 730 9232?");
@@ -813,12 +822,14 @@
 
   // ============================================================
   // CONVERSATION LOG
+  // Two types: 'update' (mid-conversation) and 'final' (on close)
+  // Both send the full transcript up to that point
   // ============================================================
-  async function sendConversationLog() {
-    if (logSent || conversationHistory.length === 0) return;
+  async function sendConversationLog(type) {
+    if (conversationHistory.length === 0) return;
     if (!WEB3FORMS_KEY || WEB3FORMS_KEY.length < 10) return;
 
-    logSent = true;
+    lastLoggedMessageCount = messageCount;
 
     const duration = Math.round((new Date() - sessionStart) / 60000);
     const timestamp = new Date().toLocaleString('en-US', {
@@ -827,6 +838,8 @@
       timeStyle: 'short'
     });
 
+    const typeLabel = type === 'final' ? 'FINAL TRANSCRIPT' : `UPDATE ${updateCount} — ${messageCount} messages so far`;
+
     let transcript = '';
     conversationHistory.forEach(msg => {
       const role = msg.role === 'user' ? (clientName || 'Visitor') : 'Lucia';
@@ -834,8 +847,8 @@
     });
 
     const emailBody = `
-LUCIA CHAT TRANSCRIPT
-=====================
+LUCIA CHAT TRANSCRIPT — ${typeLabel}
+${'='.repeat(50)}
 Date: ${timestamp}
 Duration: ~${duration} minutes
 Messages exchanged: ${messageCount}
@@ -850,13 +863,15 @@ CONVERSATION
 ${transcript}
     `.trim();
 
+    const subjectLabel = type === 'final' ? 'Final' : `Update ${updateCount}`;
+
     try {
       await fetch('https://api.web3forms.com/submit', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           access_key: WEB3FORMS_KEY,
-          subject: `Lucia Chat${clientName ? ' — ' + clientName : ''} — ${timestamp}`,
+          subject: `Lucia Chat${clientName ? ' — ' + clientName : ''} — ${subjectLabel} — ${timestamp}`,
           from_name: 'Lucia Chat Widget',
           email: NOTIFICATION_EMAIL,
           message: emailBody
@@ -960,8 +975,11 @@ ${transcript}
     return escaped;
   }
 
+  // Send final transcript on page/tab close
   window.addEventListener('beforeunload', () => {
-    if (messageCount > 0 && !logSent) sendConversationLog();
+    if (messageCount > 0 && messageCount > lastLoggedMessageCount) {
+      sendConversationLog('final');
+    }
   });
 </script>
 </body>
