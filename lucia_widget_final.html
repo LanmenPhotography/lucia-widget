@@ -742,6 +742,11 @@
     }, 1000);
   }
 
+  // Track that greeting has been shown so Claude skips re-introduction
+  function getSystemContext() {
+    return hasGreeted ? 'IMPORTANT: You have already introduced yourself as Lucia via the greeting message. Do NOT introduce yourself again. Jump straight to answering the question.' : '';
+  }
+
   // ============================================================
   // SEND MESSAGE
   // ============================================================
@@ -764,10 +769,14 @@
     showTyping();
 
     try {
+      const systemContext = getSystemContext();
       const response = await fetch(WORKER_URL, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: conversationHistory })
+        body: JSON.stringify({ 
+          messages: conversationHistory,
+          systemContext: systemContext
+        })
       });
 
       const data = await response.json();
@@ -934,9 +943,17 @@ ${transcript}
   }
 
   function formatMessage(text) {
-    return escapeHtml(text)
-      .replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>')
-      .replace(/\*(.*?)\*/g, '<em>$1</em>');
+    // First escape HTML
+    let escaped = escapeHtml(text);
+    // Then convert URLs to clickable links (before other formatting)
+    escaped = escaped.replace(
+      /(https?:\/\/[^\s<>"]+)/g,
+      '<a href="$1" target="_blank" rel="noopener noreferrer" style="color:#1B4F72;text-decoration:underline;word-break:break-all;">$1</a>'
+    );
+    // Apply bold and italic
+    escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
+    escaped = escaped.replace(/\*(.*?)\*/g, '<em>$1</em>');
+    return escaped;
   }
 
   // Send log on page unload as well
