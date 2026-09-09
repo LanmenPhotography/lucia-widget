@@ -633,8 +633,9 @@
   // ============================================================
   const WORKER_URL = 'https://lucia-proxy.damp-union-ce60.workers.dev';
   const NOTIFICATION_EMAIL = 'info@saintluciaphotographer.com';
+  // Get your free Web3Forms key at web3forms.com — takes 2 minutes
+  // Enter your email, they send you an access key, paste it below
   const WEB3FORMS_KEY = '32b59940-860e-440e-bf1c-b25b6b0bf45a';
-  const LOG_INTERVAL = 6; // Send a transcript update every X messages
 
   // ============================================================
   // STATE
@@ -647,39 +648,28 @@
   let clientEmail = '';
   let sessionStart = new Date();
   let messageCount = 0;
-  let lastLoggedMessageCount = 0; // Tracks how many messages were in the last sent log
-  let updateCount = 0; // Tracks how many mid-conversation updates have been sent
+  let logSent = false;
+  let contactCapturedMidChat = false;
+  let clientPhone = '';
 
   // ============================================================
-  // PROACTIVE BUBBLE — appears after 5 seconds, dismisses after 20
+  // PROACTIVE BUBBLE — appears after 5 seconds
   // ============================================================
   setTimeout(() => {
     if (!isOpen) {
       const bubble = document.getElementById('proactive-bubble');
       bubble.style.display = 'block';
       document.getElementById('notification-badge').style.display = 'flex';
-
-      // Auto-dismiss the bubble after 20 seconds
-      setTimeout(() => {
-        if (!isOpen) {
-          bubble.style.display = 'none';
-          document.getElementById('notification-badge').style.display = 'none';
-          window.parent.postMessage('lucia:bubble_dismissed', '*');
-        }
-      }, 20000);
     }
   }, 5000);
 
   function closeBubble(event) {
     event.stopPropagation();
     document.getElementById('proactive-bubble').style.display = 'none';
-    document.getElementById('notification-badge').style.display = 'none';
-    window.parent.postMessage('lucia:bubble_dismissed', '*');
   }
 
   function openFromBubble() {
     document.getElementById('proactive-bubble').style.display = 'none';
-    document.getElementById('notification-badge').style.display = 'none';
     if (!isOpen) toggleChat();
   }
 
@@ -710,10 +700,7 @@
       chatWindow.classList.remove('open');
       toggle.classList.remove('open');
       window.parent.postMessage('lucia:closed', '*');
-      // Send a final complete transcript when chat is closed
-      if (messageCount > 0 && messageCount > lastLoggedMessageCount) {
-        sendConversationLog('final');
-      }
+      if (messageCount > 0 && !logSent) sendConversationLog();
     }
   }
 
@@ -757,8 +744,12 @@
     }, 1000);
   }
 
+  // Track that greeting has been shown so Claude skips re-introduction
   function getSystemContext() {
-    return hasGreeted ? 'IMPORTANT: You have already introduced yourself as Lucia via the greeting message. Do NOT introduce yourself again. Jump straight to answering the question.' : '';
+    const base = hasGreeted ? 'IMPORTANT: You have already introduced yourself as Lucia via the greeting message. Do NOT introduce yourself again. Jump straight to answering the question.' : '';
+    const soufriere = 'TIMING CORRECTION: For Soufriere and south island locations, mornings AND sunsets are both excellent. Do not recommend only mornings or midday for south locations. Sunsets in Soufriere with the Pitons as backdrop are stunning.';
+    const availability = 'AVAILABILITY: When clients ask about specific dates or availability, direct them to the booking page at www.saintluciaphotographer.com where available dates are shown in real time. Do not guess or confirm specific dates yourself.';
+    return [base, soufriere, availability].filter(Boolean).join(' ');
   }
 
   // ============================================================
@@ -800,13 +791,16 @@
         const reply = data.content[0].text;
         conversationHistory.push({ role: 'assistant', content: reply });
         addMessage('lucia', reply);
+
+        // Mid-chat contact capture — trigger after 3rd exchange if not yet captured
+        if (messageCount >= 3 && !contactCapturedMidChat && !clientName && !clientEmail) {
+          contactCapturedMidChat = true;
+          setTimeout(() => showMidChatContactCapture(), 800);
+        }
         messageCount++;
 
-        // Send a mid-conversation update every LOG_INTERVAL messages
-        if (messageCount >= LOG_INTERVAL && messageCount % LOG_INTERVAL === 0) {
-          updateCount++;
-          sendConversationLog('update');
-        }
+        // Auto-send log after 6 messages for longer conversations
+        if (messageCount >= 6 && !logSent) sendConversationLog();
 
       } else {
         addMessage('lucia', "I'm sorry, I had a little trouble with that. Could you try again or reach us directly on WhatsApp at +1 758 730 9232?");
@@ -821,15 +815,13 @@
   }
 
   // ============================================================
-  // CONVERSATION LOG
-  // Two types: 'update' (mid-conversation) and 'final' (on close)
-  // Both send the full transcript up to that point
+  // CONVERSATION LOG — sends transcript to your email
   // ============================================================
-  async function sendConversationLog(type) {
-    if (conversationHistory.length === 0) return;
-    if (!WEB3FORMS_KEY || WEB3FORMS_KEY.length < 10) return;
+  async function sendConversationLog() {
+    if (logSent || conversationHistory.length === 0) return;
+    if (!WEB3FORMS_KEY || WEB3FORMS_KEY.length < 10) return; // Skip if not configured
 
-    lastLoggedMessageCount = messageCount;
+    logSent = true;
 
     const duration = Math.round((new Date() - sessionStart) / 60000);
     const timestamp = new Date().toLocaleString('en-US', {
@@ -838,8 +830,7 @@
       timeStyle: 'short'
     });
 
-    const typeLabel = type === 'final' ? 'FINAL TRANSCRIPT' : `UPDATE ${updateCount} — ${messageCount} messages so far`;
-
+    // Format the conversation transcript
     let transcript = '';
     conversationHistory.forEach(msg => {
       const role = msg.role === 'user' ? (clientName || 'Visitor') : 'Lucia';
@@ -847,8 +838,8 @@
     });
 
     const emailBody = `
-LUCIA CHAT TRANSCRIPT — ${typeLabel}
-${'='.repeat(50)}
+LUCIA CHAT TRANSCRIPT
+=====================
 Date: ${timestamp}
 Duration: ~${duration} minutes
 Messages exchanged: ${messageCount}
@@ -857,13 +848,12 @@ VISITOR DETAILS
 ---------------
 Name: ${clientName || 'Not provided'}
 Email: ${clientEmail || 'Not provided'}
+Phone: ${clientPhone || 'Not provided'}
 
 CONVERSATION
 ------------
 ${transcript}
     `.trim();
-
-    const subjectLabel = type === 'final' ? 'Final' : `Update ${updateCount}`;
 
     try {
       await fetch('https://api.web3forms.com/submit', {
@@ -871,7 +861,7 @@ ${transcript}
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           access_key: WEB3FORMS_KEY,
-          subject: `Lucia Chat${clientName ? ' — ' + clientName : ''} — ${subjectLabel} — ${timestamp}`,
+          subject: `Lucia Chat${clientName ? ' — ' + clientName : ''} — ${timestamp}`,
           from_name: 'Lucia Chat Widget',
           email: NOTIFICATION_EMAIL,
           message: emailBody
@@ -923,7 +913,57 @@ ${transcript}
     scrollToBottom();
   }
 
-  function showTyping() {
+  
+  // ============================================================
+  // MID-CHAT CONTACT CAPTURE
+  // ============================================================
+  function showMidChatContactCapture() {
+    const messages = document.getElementById('chat-messages');
+
+    addMessage('lucia', "I would love to help connect you with our team! Could I get your name and email address so someone from the office can follow up with you personally? You are also welcome to leave a phone number if you would prefer a call.");
+
+    const captureDiv = document.createElement('div');
+    captureDiv.id = 'mid-chat-capture';
+    captureDiv.style.cssText = 'background:linear-gradient(135deg,#f0f7ff 0%,#faf8f4 100%);border:1px solid #d1dce8;border-radius:12px;padding:14px;margin:8px 0;opacity:0;animation:fadeSlideIn 0.3s ease forwards;opacity:1;';
+    captureDiv.innerHTML = '<div style="display:flex;flex-direction:column;gap:8px;">' +
+      '<input id="mid-name" type="text" placeholder="Your name" style="border:1px solid #d1dce8;border-radius:8px;padding:8px 12px;font-family:Jost,sans-serif;font-size:13px;outline:none;width:100%;box-sizing:border-box;" />' +
+      '<input id="mid-email" type="email" placeholder="Email address" style="border:1px solid #d1dce8;border-radius:8px;padding:8px 12px;font-family:Jost,sans-serif;font-size:13px;outline:none;width:100%;box-sizing:border-box;" />' +
+      '<input id="mid-phone" type="tel" placeholder="Phone number (optional)" style="border:1px solid #d1dce8;border-radius:8px;padding:8px 12px;font-family:Jost,sans-serif;font-size:13px;outline:none;width:100%;box-sizing:border-box;" />' +
+      '<div style="display:flex;gap:8px;align-items:center;margin-top:4px;">' +
+      '<button onclick="submitMidChatCapture()" style="background:#1B4F72;color:white;border:none;border-radius:8px;padding:8px 16px;font-family:Jost,sans-serif;font-size:12px;cursor:pointer;flex-shrink:0;">Submit</button>' +
+      '<button onclick="skipMidChatCapture()" style="background:none;border:none;color:#9ca3af;font-family:Jost,sans-serif;font-size:11px;cursor:pointer;text-decoration:underline;padding:0;">Skip for now</button>' +
+      '</div></div>';
+    messages.appendChild(captureDiv);
+    scrollToBottom();
+  }
+
+  function submitMidChatCapture() {
+    const nameVal = document.getElementById('mid-name').value.trim();
+    const emailVal = document.getElementById('mid-email').value.trim();
+    const phoneVal = document.getElementById('mid-phone').value.trim();
+
+    if (nameVal) clientName = nameVal;
+    if (emailVal) clientEmail = emailVal;
+    if (phoneVal) clientPhone = phoneVal;
+
+    const captureDiv = document.getElementById('mid-chat-capture');
+    if (captureDiv) captureDiv.remove();
+
+    const confirmation = clientName
+      ? 'Thank you so much, ' + clientName + '! We will be in touch soon. In the meantime feel free to keep asking me anything.'
+      : 'Thank you! We will be in touch soon. Feel free to keep chatting.';
+    addMessage('lucia', confirmation);
+    sendConversationLog();
+  }
+
+  function skipMidChatCapture() {
+    contactCapturedMidChat = true;
+    const captureDiv = document.getElementById('mid-chat-capture');
+    if (captureDiv) captureDiv.remove();
+    addMessage('lucia', "No problem at all! Feel free to keep chatting and you can always reach us directly at info@saintluciaphotographer.com or on WhatsApp at +1 758 730 9232.");
+  }
+
+function showTyping() {
     const messages = document.getElementById('chat-messages');
     const typing = document.createElement('div');
     typing.id = 'typing-indicator';
@@ -965,21 +1005,22 @@ ${transcript}
   }
 
   function formatMessage(text) {
+    // First escape HTML
     let escaped = escapeHtml(text);
+    // Then convert URLs to clickable links (before other formatting)
     escaped = escaped.replace(
       /(https?:\/\/[^\s<>"]+)/g,
       '<a href="$1" target="_blank" rel="noopener noreferrer" style="color:#1B4F72;text-decoration:underline;word-break:break-all;">$1</a>'
     );
+    // Apply bold and italic
     escaped = escaped.replace(/\*\*(.*?)\*\*/g, '<strong>$1</strong>');
     escaped = escaped.replace(/\*(.*?)\*/g, '<em>$1</em>');
     return escaped;
   }
 
-  // Send final transcript on page/tab close
+  // Send log on page unload as well
   window.addEventListener('beforeunload', () => {
-    if (messageCount > 0 && messageCount > lastLoggedMessageCount) {
-      sendConversationLog('final');
-    }
+    if (messageCount > 0 && !logSent) sendConversationLog();
   });
 </script>
 </body>
