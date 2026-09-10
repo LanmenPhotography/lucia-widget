@@ -524,6 +524,35 @@
   #message-input:focus { border-color: var(--ocean); background: white; }
   #message-input::placeholder { color: #9ca3af; font-weight: 300; }
 
+  #contact-btn {
+    width: 38px;
+    height: 38px;
+    border-radius: 50%;
+    background: white;
+    border: 1.5px solid #e5e7eb;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    flex-shrink: 0;
+    transition: all 0.2s ease;
+    color: var(--ocean);
+  }
+
+  #contact-btn:hover {
+    background: var(--ocean);
+    border-color: var(--ocean);
+    color: white;
+    transform: scale(1.08);
+  }
+
+  #contact-btn svg {
+    width: 16px;
+    height: 16px;
+    stroke: currentColor;
+    fill: none;
+  }
+
   #send-btn {
     width: 38px;
     height: 38px;
@@ -612,6 +641,9 @@
   </div>
 
   <div class="chat-input-area">
+    <button id="contact-btn" onclick="triggerContactForm()" aria-label="Contact us" title="Get in touch">
+      <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M20 21v-2a4 4 0 0 0-4-4H8a4 4 0 0 0-4 4v2"/><circle cx="12" cy="7" r="4"/></svg>
+    </button>
     <textarea
       id="message-input"
       placeholder="Ask Lucia anything..."
@@ -795,6 +827,11 @@
         // Mid-chat contact capture — trigger after 3rd exchange if not yet captured
         if (messageCount >= 3 && !contactCapturedMidChat && !clientName && !clientEmail) {
           contactCapturedMidChat = true;
+          // Add to conversation history so Claude knows the form was shown
+          conversationHistory.push({
+            role: 'assistant',
+            content: '[SYSTEM NOTE: A contact capture form was just displayed to the visitor asking for their name, email, and phone number so someone from the office can follow up.]'
+          });
           setTimeout(() => showMidChatContactCapture(), 800);
         }
         messageCount++;
@@ -937,6 +974,32 @@ ${transcript}
     scrollToBottom();
   }
 
+  // Triggered by the contact button — works at any point in the conversation
+  function triggerContactForm() {
+    // If already have details, confirm them instead of showing form again
+    if (clientName || clientEmail) {
+      addMessage('lucia', "We already have your details on file — " +
+        (clientName ? clientName + ", " : "") +
+        (clientEmail ? clientEmail + ". " : "") +
+        "Someone from our team will be in touch with you soon!");
+      return;
+    }
+
+    // Remove any existing form first to avoid duplicates
+    const existing = document.getElementById('mid-chat-capture');
+    if (existing) existing.remove();
+
+    // Reset the flag so the form shows fresh
+    contactCapturedMidChat = false;
+    showMidChatContactCapture();
+
+    // Add system note to conversation history
+    conversationHistory.push({
+      role: 'assistant',
+      content: '[SYSTEM NOTE: Client clicked the contact button and a contact capture form was shown again.]'
+    });
+  }
+
   function submitMidChatCapture() {
     const nameVal = document.getElementById('mid-name').value.trim();
     const emailVal = document.getElementById('mid-email').value.trim();
@@ -949,10 +1012,17 @@ ${transcript}
     const captureDiv = document.getElementById('mid-chat-capture');
     if (captureDiv) captureDiv.remove();
 
+    // Add captured details to conversation history so Claude knows
+    conversationHistory.push({
+      role: 'user',
+      content: '[CONTACT DETAILS CAPTURED: Name: ' + (clientName || 'not provided') + ', Email: ' + (clientEmail || 'not provided') + ', Phone: ' + (clientPhone || 'not provided') + ']'
+    });
+
     const confirmation = clientName
       ? 'Thank you so much, ' + clientName + '! We will be in touch soon. In the meantime feel free to keep asking me anything.'
       : 'Thank you! We will be in touch soon. Feel free to keep chatting.';
     addMessage('lucia', confirmation);
+    conversationHistory.push({ role: 'assistant', content: confirmation });
     sendConversationLog();
   }
 
