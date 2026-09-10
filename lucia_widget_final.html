@@ -77,14 +77,15 @@
   /* PROACTIVE BUBBLE */
   #proactive-bubble {
     position: fixed;
-    bottom: 92px;
-    right: 88px;
+    bottom: 86px;
+    right: 10px;
     background: white;
     border-radius: 16px;
     border-bottom-right-radius: 4px;
     padding: 12px 16px;
     box-shadow: var(--shadow-lg);
-    max-width: 220px;
+    max-width: 240px;
+    width: max-content;
     font-size: 13px;
     font-family: 'Jost', sans-serif;
     font-weight: 300;
@@ -111,13 +112,13 @@
   #proactive-bubble::after {
     content: '';
     position: absolute;
-    bottom: -8px;
-    right: 12px;
+    bottom: 16px;
+    right: -8px;
     width: 0;
     height: 0;
-    border-left: 8px solid transparent;
-    border-right: 0px solid transparent;
-    border-top: 8px solid white;
+    border-top: 8px solid transparent;
+    border-bottom: 8px solid transparent;
+    border-left: 8px solid white;
   }
 
   #proactive-bubble .bubble-name {
@@ -685,6 +686,9 @@
   let clientPhone = '';
 
   // ============================================================
+  // Signal parent page that widget is ready — enables pointer events on toggle button
+  window.parent.postMessage('lucia:ready', '*');
+
   // PROACTIVE BUBBLE — appears after 5 seconds
   // ============================================================
   setTimeout(() => {
